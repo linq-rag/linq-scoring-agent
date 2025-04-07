@@ -1,0 +1,11 @@
+data/*
+depricated/*
+filter.py
+compare.py
+send_stock.py
+stock_data.py
+test.py
+snp.py
+snp500.csv
+.idea/*
+src/scoring/.env
