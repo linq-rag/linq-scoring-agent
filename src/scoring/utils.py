@@ -1,3 +1,18 @@
+"""
+LINQ Scoring Agent - Utility Functions Module
+
+This module provides essential utility functions for text processing, data manipulation,
+and API interactions used throughout the LINQ scoring pipeline. It includes functions
+for transcript segmentation, company information retrieval, and ticker set operations.
+
+Key Features:
+- Text preprocessing and sentence tokenization
+- Transcript and list chunking for parallel processing
+- Company name resolution via Financial Modeling Prep API
+- Historical ticker data filtering and intersection
+- Retry decorators for robust API calls
+"""
+
 import logging
 import os
 from datetime import datetime
@@ -13,46 +28,98 @@ from src.scoring._default import DEFAULT_EMPTY_PARSED_COMPLETION
 
 logger = logging.getLogger(__name__)
 
+# Load environment variables for API keys
 dotenv.load_dotenv()
 
 
 def handle_max_retries(retry_state):
-    """Logs only the last error message after max retries are exhausted."""
+    """
+    Handle retry exhaustion by logging the final error.
+    
+    This callback function is triggered when maximum retry attempts are reached.
+    It logs only the final error message to avoid spam while providing visibility
+    into persistent failures.
+    
+    Args:
+        retry_state: Tenacity retry state object containing error information
+        
+    Returns:
+        Default empty parsed completion object for graceful degradation
+    """
     last_exception = retry_state.outcome.exception()
     if last_exception:
         logging.error(f"Task {retry_state.args[0]} failed after max retries: {str(last_exception)[:20]}")
     return DEFAULT_EMPTY_PARSED_COMPLETION
 
 
-# Create a reusable decorator for retrying async functions
 def retry_fetch(wait_seconds: int, max_retries: int):
+    """
+    Create a reusable retry decorator for asynchronous API functions.
+    
+    This decorator factory provides consistent retry behavior across different
+    API calls with configurable wait time and maximum attempts.
+    
+    Args:
+        wait_seconds: Number of seconds to wait between retry attempts
+        max_retries: Maximum number of retry attempts before giving up
+        
+    Returns:
+        Tenacity retry decorator configured with specified parameters
+    """
     return retry(
-        stop=stop_after_attempt(max_retries),  # Retry any exception up to 3 times
-        wait=wait_fixed(wait_seconds),  # Wait 1 second between retries
+        stop=stop_after_attempt(max_retries),  # Retry any exception up to max_retries times
+        wait=wait_fixed(wait_seconds),  # Wait specified seconds between retries
         retry_error_callback=handle_max_retries  # Log only the last error
     )
 
 
-def get_sentences(text: str):
+def get_sentences(text: str) -> List[str]:
     """
-    Tokenizes the given text into sentences using NLTK's `sent_tokenize`.
-
+    Tokenize text into individual sentences using NLTK.
+    
+    This function processes multi-line text by first splitting on newlines,
+    then applying NLTK's sentence tokenizer to each line. This approach
+    preserves document structure while ensuring proper sentence boundaries.
+    
     Args:
-        text (`str`): The text to be tokenized into sentences.
-
+        text: Input text to be tokenized into sentences
+        
     Returns:
-        `List[str]`: A list of sentences extracted from the text.
+        List of sentences extracted from the input text
+        
+    Note:
+        Requires NLTK punkt tokenizer data to be downloaded
     """
-    text_sentences = text.split("\n")  # Split text into lines
+    text_sentences = text.split("\n")  # Split text into lines first
     sentences = []
     for sentence in text_sentences:
-        # Tokenize each line into sentences
+        # Apply sentence tokenization to each line
         sentences.extend(sent_tokenize(sentence))
 
     return sentences
 
 
 def split_transcript_into_n(text: str, n: int) -> List[str]:
+    """
+    Split earnings call transcript into n roughly equal parts.
+    
+    This function divides a transcript by line breaks into n parts for
+    parallel processing. It ensures roughly equal distribution of content
+    while maintaining line boundaries.
+    
+    Args:
+        text: Full transcript text to be split
+        n: Number of parts to split into (must be >= 1)
+        
+    Returns:
+        List of n text chunks, each containing roughly equal content
+        
+    Raises:
+        ValueError: If n < 1
+        
+    Note:
+        Any remaining lines after equal division are appended to the last part
+    """
     if n < 2:
         if n == 1:
             return [text]
@@ -63,7 +130,10 @@ def split_transcript_into_n(text: str, n: int) -> List[str]:
     total_length = len(sections)
     split_size = total_length // n
 
+    # Create n equal parts
     parts = [sections[i * split_size:(i + 1) * split_size] for i in range(n)]
+    
+    # Add any remaining sections to the last part
     remaining_sections = sections[n * split_size:]
     if remaining_sections:
         parts[-1].extend(remaining_sections)
@@ -73,20 +143,43 @@ def split_transcript_into_n(text: str, n: int) -> List[str]:
 
 def split_list_into_n(lst: List[Any], n: int) -> List[List[Any]]:
     """
-    Splits a list into `n` roughly equal parts.
-
+    Split a list into n roughly equal sublists.
+    
+    This utility function divides any list into n parts with roughly equal
+    element counts. It filters out empty sublists that may result from
+    splitting small lists.
+    
     Args:
-        lst (`List[Any]`): The list to be split.
-        n (`int`): The number of parts to split the list into.
-
+        lst: The list to be split into parts
+        n: Number of sublists to create
+        
     Returns:
-        `List[List[Any]]`: A list of `n` sublists, each containing roughly equal elements from the input list.
+        List of sublists, each containing roughly equal elements from input
+        
+    Note:
+        Returns fewer than n sublists if the input list is very small
     """
     len_list = len(lst)  # Total length of the input list
     return [lst[i * len_list // n: (i + 1) * len_list // n] for i in range(n) if lst[i * len_list // n: (i + 1) * len_list // n]]
 
 
-def get_company_name(ticker):
+def get_company_name(ticker: str) -> str:
+    """
+    Retrieve company name from ticker symbol using Financial Modeling Prep API.
+    
+    This function fetches the official company name for a given stock ticker
+    symbol. It provides fallback behavior by returning the ticker itself
+    if the API call fails or returns no data.
+    
+    Args:
+        ticker: Stock ticker symbol (e.g., 'AAPL', 'MSFT')
+        
+    Returns:
+        Company name if successfully retrieved, otherwise the ticker symbol
+        
+    Note:
+        Requires FMP_API_KEY environment variable to be set
+    """
     api_key = os.getenv("FMP_API_KEY")
     url = f'https://financialmodelingprep.com/api/v3/profile/{ticker}?apikey={api_key}'
     response = requests.get(url)
@@ -100,47 +193,42 @@ def get_company_name(ticker):
         logger.info(f'Error while retrieving company name for ticker {ticker}: {response.status_code}')
         return ticker
 
+
 def get_ticker_set(
         start_date: datetime,
         end_date: datetime,
         filename: str = "./data/historical_component.csv"
 ) -> Set:
     """
-    Extract the common subset of tickers that appear in all rows of a given date range.
-
-    Parameters
-    ----------
-    start_date : datetime
-        The start date for filtering the data.
-    end_date : datetime
-        The end date for filtering the data.
-    filename : str, optional
-        The path to the CSV file containing historical data (default is "./data/historical_component.csv").
-
-    Returns
-    -------
-    set
-        A set of tickers that are common across all rows within the specified date range.
-
-    Raises
-    ------
-    FileNotFoundError
-        If the specified file is not found.
-    ValueError
-        If the 'tickers' column is missing or the filtered DataFrame is empty.
-
-    Notes
-    -----
-    - The CSV file should have a 'date' column as its index and a 'tickers' column containing comma-separated tickers.
-    - The 'date' column in the CSV must be in a format that can be parsed as datetime.
+    Extract common ticker subset from historical S&P 500 component data.
+    
+    This function finds tickers that were consistently part of the S&P 500
+    throughout the specified date range. It's useful for ensuring analysis
+    uses only stable index components during the period of interest.
+    
+    Args:
+        start_date: Beginning of the date range for filtering
+        end_date: End of the date range for filtering
+        filename: Path to CSV file with historical component data
+        
+    Returns:
+        Set of ticker symbols common across all dates in the range
+        
+    Raises:
+        FileNotFoundError: If the specified CSV file doesn't exist
+        ValueError: If no data found in range or required columns missing
+        
+    Note:
+        CSV file must have 'date' as index and 'tickers' column with
+        comma-separated ticker symbols
     """
     if not os.path.isfile(filename):
         raise FileNotFoundError(f"{filename} not found.")
 
-    # Read the CSV file
+    # Load historical component data with date parsing
     dataframe = pd.read_csv(filename, index_col='date', parse_dates=True)
 
-    # Filter the DataFrame by date range
+    # Filter data to specified date range
     filtered_df = dataframe[(dataframe.index >= start_date) & (dataframe.index <= end_date)]
 
     print(filtered_df)
@@ -151,7 +239,7 @@ def get_ticker_set(
     if 'tickers' not in filtered_df.columns:
         raise ValueError("The required 'tickers' column is missing in the CSV file.")
 
-    # Split tickers in each row and find the common subset
+    # Find intersection of all ticker sets in the date range
     tickers_sets = [set(row.split(',')) for row in filtered_df['tickers']]
     common_tickers = set.intersection(*tickers_sets)
     print(common_tickers)

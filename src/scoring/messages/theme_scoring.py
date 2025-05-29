@@ -1,4 +1,12 @@
-from typing import List, Dict
+"""
+Theme Scoring Prompt Messages
+
+This module provides prompt templates for scoring companies' relevance and
+sentiment regarding specific themes based on filtered quotes from earnings calls.
+It implements a dual-scoring system for both thematic relevance and sentiment.
+"""
+
+from typing import Dict, List
 
 _SYSTEM_SCORE_PROMPT = """
 <task>
@@ -54,7 +62,25 @@ Analyze the provided theme-related quotes for relevance and sentiment.
 
 
 def get_theme_scoring_messages(company_name: str, quotes: str) -> List[Dict[str, str]]:
-
+    """
+    Generate LLM messages for theme-specific relevance and sentiment scoring.
+    
+    This function creates prompts for scoring a company's relationship to a specific
+    theme based on filtered quotes from earnings calls. It implements a dual-scoring
+    approach that evaluates both thematic relevance (0-2) and sentiment (-1 to 1).
+    
+    Args:
+        company_name: Name of the company being analyzed
+        quotes: Formatted theme-relevant quotes for scoring
+        
+    Returns:
+        List of message dictionaries with system and user prompts
+        for comprehensive theme scoring analysis
+        
+    Note:
+        The scoring considers industry context, competitive positioning,
+        revenue impact, and strategic implications for comprehensive evaluation
+    """
     messages = [
         {
             "role": "system",

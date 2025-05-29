@@ -1,3 +1,29 @@
+"""
+LINQ Scoring Agent - Financial Theme Definitions Module
+
+This module contains predefined financial and economic themes for different quarters
+from 2021 Q4 through 2023 Q3. These themes represent significant market trends,
+technological developments, and economic factors during each period.
+
+The themes are used for:
+- Theme-specific sentiment analysis of earnings calls
+- Trend analysis across different time periods  
+- Comparative studies of market focus evolution
+- Sector and technology impact assessment
+
+Theme Categories:
+- Technology: AI, Cybersecurity, Cloud Computing, Quantum Computing
+- Energy: Renewable Energy, Nuclear Fusion, Hydrogen Energy
+- Space: Space Exploration, Space Tourism, Commercial Spaceflight
+- Finance: Cryptocurrency, Banking, Digital Currency, ESG
+- Healthcare: Biotechnology, Pharmaceuticals, Telemedicine
+- Infrastructure: Telecommunications, Defense, Supply Chain
+- Environment: Climate Change, Green Infrastructure, Water Technology
+
+Each quarterly theme list reflects the dominant narratives and concerns
+of that specific period in financial markets.
+"""
+
 THEME_2021_4Q = [
     "mRNA",
     "GeneTherapy",

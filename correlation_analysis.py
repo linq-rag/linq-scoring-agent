@@ -1,3 +1,20 @@
+"""
+LINQ Scoring Agent - Correlation Analysis Module
+
+This module analyzes the correlation between sentiment scores from earnings call
+analysis and subsequent stock price movements using Cumulative Abnormal Returns (CAR).
+It provides comprehensive statistical analysis and visualization tools for evaluating
+the predictive power of sentiment analysis.
+
+Key Features:
+- Stock price data loading and processing
+- CAR(0,1) calculation using abnormal returns
+- Sentiment-return correlation analysis with statistical significance testing
+- Data filtering by quote count thresholds
+- Comprehensive visualization and summary reporting
+- Batch processing across multiple quarters
+"""
+
 import glob
 import json
 import os
@@ -11,7 +28,22 @@ from scipy.stats import pearsonr
 
 def load_stock_price_data(stock_price_file):
     """
-    Load stock price data file and organize data by ticker.
+    Load and organize stock price data from JSONL file by ticker symbol.
+    
+    This function reads stock price data from a JSONL file where each line
+    contains ticker symbol and associated price/return data. It organizes
+    the data by ticker for efficient lookup during analysis.
+    
+    Args:
+        stock_price_file: Path to JSONL file containing stock price data
+        
+    Returns:
+        Dictionary mapping ticker symbols to their stock price data,
+        with structure: {ticker: {'stock_prices': [price_records]}}
+        
+    Note:
+        Each price record should contain date, abnormal return, and other
+        price metrics for correlation analysis
     """
     stock_price_dict = {}
     
@@ -27,9 +59,7 @@ def load_stock_price_data(stock_price_file):
                     
                     stock_prices = data.get('stock_prices', [])
                     
-                    # # 날짜 기준으로 정렬 (최신 날짜 순)
-                    # stock_prices.sort(key=lambda x: x.get('date', ''), reverse=True)
-                    
+                    # Store stock price data organized by ticker
                     stock_price_dict[ticker] = {
                         'stock_prices': stock_prices
                     }
@@ -47,7 +77,24 @@ def load_stock_price_data(stock_price_file):
 
 def load_and_analyze_theme_data(theme_file, stock_price_dict, is_overall=False):
     """
-    Load theme data file and calculate CAR(0,1) using stock price data.
+    Load theme analysis data and calculate CAR(0,1) for correlation analysis.
+    
+    This function processes theme or overall sentiment analysis results,
+    extracts sentiment scores and quote counts, then calculates Cumulative
+    Abnormal Returns (CAR) over a 2-day window [0,1] relative to earnings
+    announcement dates.
+    
+    Args:
+        theme_file: Path to JSONL file containing theme analysis results
+        stock_price_dict: Dictionary of stock price data organized by ticker
+        is_overall: Whether processing overall sentiment (True) or theme-specific (False)
+        
+    Returns:
+        DataFrame containing combined sentiment and return data with columns:
+        - ticker, event_date, avg_sentiment_score, car_m1_p1, filtered_count
+        
+    The function handles missing data gracefully and provides detailed logging
+    for debugging data quality issues.
     """
     results = []
     
@@ -57,36 +104,36 @@ def load_and_analyze_theme_data(theme_file, stock_price_dict, is_overall=False):
                 try:
                     data = json.loads(line.strip())
                     
-                    # Extract necessary data
+                    # Extract necessary data from analysis results
                     custom_id = data.get('custom_id', '')
                     
-                    # Use appropriate output field based on theme type
+                    # Use appropriate output field based on analysis type
                     output_field = 'filtered_overall_output' if is_overall else 'filtered_theme_output'
                     filtered_quotes = data.get(output_field, {}).get('quotes', [])
                     filtered_scores = data.get(output_field, {}).get('sentiment_scores', [])
                     
-                    # Skip if no quotes
+                    # Skip entries with no extracted quotes
                     if not filtered_quotes:
                         continue
                     
-                    # Extract ticker from custom_id
+                    # Extract ticker symbol from custom_id
                     ticker = 'UNKNOWN'
                     if custom_id.startswith('task-'):
                         parts = custom_id.split('-')
                         if len(parts) > 1:
                             ticker = parts[1]
                     
-                    # Check data consistency for scores and quotes
+                    # Validate data consistency between scores and quotes
                     if not filtered_scores or len(filtered_scores) != len(filtered_quotes):
                         print(f"Warning: {custom_id} has missing scores or mismatched length with quotes")
                         continue
                     
-                    # Skip if no stock price data for ticker
+                    # Skip if no corresponding stock price data available
                     if ticker not in stock_price_dict:
                         print(f"Warning: No stock price data for ticker {ticker}")
                         continue
                     
-                    # Identify event date
+                    # Parse event date from custom_id format: task-TICKER-YY-MM-DD
                     event_date = None
                     if custom_id.startswith('task-'):
                         parts = custom_id.split('-')
@@ -100,29 +147,28 @@ def load_and_analyze_theme_data(theme_file, stock_price_dict, is_overall=False):
                         print(f"Warning: Cannot extract event date from {custom_id}")
                         continue
                     
-                    # Find event date and next day in stock price data
+                    # Find event date and next trading day in stock price data
                     stock_prices = stock_price_dict[ticker]['stock_prices']
                     
                     event_day_data = None
                     next_day_data = None
                     
-                    # Find event date
+                    # Search for exact event date match
                     for i, price_data in enumerate(stock_prices):
                         if price_data.get('date') == event_date:
                             event_day_data = price_data
-                            # Check for next day data (dates might be reverse sorted)
+                            # Find next trading day data
                             for j, next_price_data in enumerate(stock_prices):
-                                if j != i:  # Must not be same data
+                                if j != i:  # Must be different entry
                                     next_date = next_price_data.get('date', '')
-                                    # Check if next trading day
+                                    # Check if next trading day (accounting for weekends/holidays)
                                     if is_next_trading_day(event_date, next_date):
                                         next_day_data = next_price_data
                                         break
                             break
                     
-                    # If event date or next day data not found
+                    # Fallback: find consecutive days with valid abnormal returns
                     if not event_day_data or not next_day_data:
-                        # Alternative: find consecutive days with abnormal returns
                         for i in range(len(stock_prices) - 1):
                             current_data = stock_prices[i]
                             next_data = stock_prices[i+1]
@@ -135,26 +181,27 @@ def load_and_analyze_theme_data(theme_file, stock_price_dict, is_overall=False):
                                 next_day_data = next_data
                                 break
                     
-                    # Skip if still no appropriate data found
+                    # Skip if insufficient data for CAR calculation
                     if not event_day_data or not next_day_data:
                         print(f"Warning: No suitable event date or consecutive abnormal return data found for {ticker}({event_date})")
                         continue
                     
-                    # Extract abnormal return values
+                    # Extract abnormal return values for CAR calculation
                     event_day_ar = event_day_data.get('abnormal_return')
                     next_day_ar = next_day_data.get('abnormal_return')
                     
-                    # Check if all abnormal return values exist
+                    # Validate abnormal return data availability
                     if event_day_ar is None or next_day_ar is None:
                         print(f"Warning: Missing abnormal return values for {ticker}({event_date})")
                         continue
                     
-                    # Calculate CAR(0, 1)
+                    # Calculate Cumulative Abnormal Return CAR(0,1)
                     car_m1_p1 = (1 + event_day_ar) * (1 + next_day_ar) - 1
                     
-                    # Store data
+                    # Calculate average sentiment score across all filtered quotes
                     avg_sentiment_score = np.mean(filtered_scores)
                     
+                    # Store complete analysis result
                     results.append({
                         'ticker': ticker,
                         'custom_id': custom_id,
@@ -180,7 +227,7 @@ def load_and_analyze_theme_data(theme_file, stock_price_dict, is_overall=False):
         print("No results to process")
         return None
     
-    # Convert to DataFrame
+    # Convert to DataFrame for statistical analysis
     df = pd.DataFrame(results)
     
     return df
@@ -188,13 +235,25 @@ def load_and_analyze_theme_data(theme_file, stock_price_dict, is_overall=False):
 
 def is_next_trading_day(date1, date2):
     """
-    Check if date2 is the next trading day after date1.
-    Trading day gap can be 1-3 days (considering weekends and holidays).
+    Determine if date2 represents the next trading day after date1.
+    
+    This function checks whether two dates represent consecutive trading days,
+    accounting for weekends and holidays where the gap may be 1-3 calendar days.
+    
+    Args:
+        date1: Starting date in 'YYYY-MM-DD' format
+        date2: Potential next trading date in 'YYYY-MM-DD' format
+        
+    Returns:
+        Boolean indicating if date2 is the next trading day after date1
+        
+    Note:
+        Trading day gaps can be 1-3 days considering weekends and holidays
     """
     try:
         from datetime import datetime
 
-        # 날짜 문자열을 datetime 객체로 변환
+        # Convert date strings to datetime objects for comparison
         d1 = datetime.strptime(date1, "%Y-%m-%d")
         d2 = datetime.strptime(date2, "%Y-%m-%d")
         

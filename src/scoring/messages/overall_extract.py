@@ -1,3 +1,11 @@
+"""
+Overall Sentiment Extraction Prompt Messages
+
+This module provides prompt templates for extracting financially relevant
+content from earnings call transcripts for overall sentiment analysis.
+It focuses on broad investment insights rather than specific themes.
+"""
+
 import json
 from typing import Dict, List
 
@@ -42,7 +50,25 @@ Select indices of key sentences.
 
 
 def get_overall_extracting_messages(company_name: str, transcript: str) -> List[Dict[str, str]]:
-
+    """
+    Generate LLM messages for overall financial sentiment extraction.
+    
+    This function creates prompts for extracting broadly relevant financial
+    content from earnings call transcripts. Unlike theme-specific extraction,
+    this focuses on general investment insights and company performance indicators.
+    
+    Args:
+        company_name: Name of the company for contextual analysis
+        transcript: Formatted transcript text with numbered quotes
+        
+    Returns:
+        List of message dictionaries with system and user prompts
+        for overall sentiment analysis
+        
+    Note:
+        The extraction criteria prioritize financial relevance and
+        sentiment impact over specific thematic alignment
+    """
     messages = [
         {
             "role": "system", 

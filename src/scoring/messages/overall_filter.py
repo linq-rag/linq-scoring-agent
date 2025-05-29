@@ -1,4 +1,12 @@
-from typing import List, Dict
+"""
+Overall Sentiment Filtering Prompt Messages
+
+This module provides prompt templates for filtering financially relevant quotes
+and assigning sentiment scores for overall investment analysis. It focuses on
+actionable investment insights and meaningful sentiment indicators.
+"""
+
+from typing import Dict, List
 
 _SYSTEM_OVERALL_FILTER_PROMPT = """
 <task>
@@ -43,7 +51,26 @@ Analyze the provided phrases and determine whether they offer meaningful investm
 
 
 def get_overall_filtering_messages(company_name: str, quotes: str) -> List[Dict[str, str]]:
-
+    """
+    Generate LLM messages for overall financial quote filtering and sentiment analysis.
+    
+    This function creates prompts for filtering previously extracted quotes to retain
+    only those that provide actionable investment insights or reveal meaningful
+    sentiment from company management. Unlike theme-specific filtering, this focuses
+    on broad financial relevance.
+    
+    Args:
+        company_name: Name of the company for contextual analysis
+        quotes: Formatted quotes text to be filtered and scored
+        
+    Returns:
+        List of message dictionaries with system and user prompts
+        for overall financial filtering and sentiment analysis
+        
+    Note:
+        The filtering prioritizes actionable investment insights over
+        generic or promotional content to enhance analysis quality
+    """
     messages = [
         {
             "role": "system",

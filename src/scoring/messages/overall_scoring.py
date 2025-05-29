@@ -1,4 +1,12 @@
-from typing import List, Dict
+"""
+Overall Sentiment Scoring Prompt Messages
+
+This module provides prompt templates for scoring overall company sentiment
+based on filtered quotes from earnings calls. It focuses on predicting stock
+performance impact and providing comprehensive analytical justification.
+"""
+
+from typing import Dict, List
 
 _SYSTEM_OVERALL_SCORE_PROMPT = """
 <task>
@@ -30,7 +38,7 @@ You are a financial analyst evaluating an earnings call transcript to assess sen
 
 _USER_OVERALL_SCORE_PROMPT = """
 <company>
-company_name}
+{company_name}
 </company>
 
 <instruction>
@@ -44,7 +52,25 @@ Analyze the provided quotes and assess the company's sentiment.
 
 
 def get_overall_scoring_messages(company_name: str, quotes: str) -> List[Dict[str, str]]:
-
+    """
+    Generate LLM messages for overall company sentiment scoring.
+    
+    This function creates prompts for scoring a company's overall sentiment
+    based on filtered quotes from earnings calls. It provides a single
+    sentiment score (-1 to 1) with detailed analytical justification.
+    
+    Args:
+        company_name: Name of the company being analyzed
+        quotes: Formatted financially relevant quotes for scoring
+        
+    Returns:
+        List of message dictionaries with system and user prompts
+        for overall sentiment analysis
+        
+    Note:
+        The scoring emphasizes stock performance prediction and requires
+        comprehensive justification considering industry and market context
+    """
     messages = [
         {
             "role": "system",
@@ -52,7 +78,7 @@ def get_overall_scoring_messages(company_name: str, quotes: str) -> List[Dict[st
         },
         {
             "role": "user",
-            "content": _SYSTEM_OVERALL_SCORE_PROMPT.format(company_name=company_name, quotes=quotes)
+            "content": _USER_OVERALL_SCORE_PROMPT.format(company_name=company_name, quotes=quotes)
         },
     ]
     return messages
